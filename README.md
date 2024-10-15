@@ -1,11 +1,5 @@
  <h1> Team Collaboration Hub</h1>
  
-
-   ## Expense Swagger UI
-   
-   ![Expense Dashboard](./image/img1.png)
-   <br>
-    ![Expense Dashboard](./image/img2.png)
    
 # Team Collaboration Hub
 
