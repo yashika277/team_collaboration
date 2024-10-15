@@ -1,92 +1,92 @@
 const express = require("express");
-const connectDB = require("./config/db");
-const dotenv = require("dotenv");
-const userRoutes = require("./routes/userRoutes");
-const chatRoutes = require("./routes/chatRoutes");
-const messageRoutes = require("./routes/messageRoutes");
-const { notFound, errorHandler } = require("./middleware/errorMiddleware");
-const path = require("path");
-
-dotenv.config();
-connectDB();
+const http = require('http');
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-app.use(express.json()); // to accept json data
+require("./config/db");
+require("dotenv").config();
+const cors = require("cors");
+const helmet = require("helmet");
+const { Server } = require("socket.io");
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+app.use(helmet());
+
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
+
+const userRoutes = require("./routes/userRoutes");
+const taskRoutes = require("./routes/taskRoutes");
+const chatRoutes = require("./routes/chatroutes");
+
+app.use("/api/v1", userRoutes);
+app.use("/api/v1/task", taskRoutes);
+app.use("/api/v1/chat", chatRoutes);
+
+// Create HTTP server and initialize socket.io
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+io.on('connection', (socket) => {
+  console.log('New connection established');
+
+  // Join project-specific room
+  socket.on('joinRoom', (roomId) => {
+      socket.join(roomId);  // Users join the project-specific room
+      console.log(`User joined project room: ${roomId}`);
+  });
+
+  // Listen for chat messages and broadcast them to the room
+  socket.on('chatMessage', (msg) => {
+      io.to(msg.projectId).emit('message', {
+          projectId: msg.projectId,
+          sender: msg.sender,  // e.g., the user's name or ID
+          message: msg.message,
+          timestamp: new Date().toISOString()
+      });
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+      console.log('User disconnected');
+  });
+});
+
+// swagger Ui
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerDefinition = {
+    openapi: '3.0.0',
+    info: {
+        title: ' Team_Collaboration_Management  API',
+        version: '1.0.0',
+        description: 'API for managing Team_Collaboration_Management',
+    },
+    servers: [
+        {
+            url: 'http://localhost:5000/api', // Replace with your API base URL
+        },
+    ],
+};
+// Options for Swagger JSDoc
+const options = {
+    swaggerDefinition,
+    // Path to the API docs
+    apis: ['./routes/userRoutes.js', './routes/taskRoutes.js','./routes/chatroutes.js'], // Path where API routes are defined
+};
+
+// Initialize SwaggerJSDoc
+const swaggerSpec = swaggerJsdoc(options);
+
+// Use Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get("/", (req, res) => {
     res.send(
       "<center><h1>Team collaboration Application</h1><br>Get Api <a href=https://github.com/yashika277/team_collaboration.git target=_blank>Repository :Team collaboration Application</a></center>"
-    );
-  });
+    );
+  });
 
-app.use("/api/user", userRoutes);
-app.use("/api/chat", chatRoutes);
-app.use("/api/message", messageRoutes);
-
-// --------------------------deployment------------------------------
-
-// const __dirname1 = path.resolve();
-
-// if (process.env.NODE_ENV === "production") {
-//   app.use(express.static(path.join(__dirname1, "/frontend/build")));
-
-//   app.get("*", (req, res) =>
-//     res.sendFile(path.resolve(__dirname1, "frontend", "build", "index.html"))
-//   );
-// } else {
-//   app.get("/", (req, res) => {
-//     res.send("API is running..");
-//   });
-// }
-
-// --------------------------deployment------------------------------
-
-//Error Handling middlewares
-app.use(notFound);
-app.use(errorHandler);
-
-const PORT = process.env.PORT;
-
-const server = app.listen(PORT,
-  console.log(`Server running on PORT ${PORT}...`)
-);
-
-const io = require("socket.io")(server, {
-  pingTimeout: 60000,
-  cors: {
-    origin: "http://localhost:3000",
-    // credentials: true,
-  },
-});
-
-io.on("connection", (socket) => {
-  console.log("Connected to socket.io");
-  socket.on("setup", (userData) => {
-    socket.join(userData._id);
-    socket.emit("connected");
-  });
-
-  socket.on("join chat", (room) => {
-    socket.join(room);
-    console.log("User Joined Room: " + room);
-  });
-  socket.on("typing", (room) => socket.in(room).emit("typing"));
-  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
-
-  socket.on("new message", (newMessageRecieved) => {
-    var chat = newMessageRecieved.chat;
-
-    if (!chat.users) return console.log("chat.users not defined");
-
-    chat.users.forEach((user) => {
-      if (user._id == newMessageRecieved.sender._id) return;
-
-      socket.in(user._id).emit("message recieved", newMessageRecieved);
-    });
-  });
-
-  socket.off("setup", () => {
-    console.log("USER DISCONNECTED");
-    socket.leave(userData._id);
-  });
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
